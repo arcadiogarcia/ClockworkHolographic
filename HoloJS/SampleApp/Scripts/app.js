@@ -17,6 +17,8 @@ var mUniform;
 var vUniform;
 var samplerUniform;
 
+var objects = [];
+
 //
 // start
 //
@@ -43,7 +45,7 @@ function start() {
         // Here's where we call the routine that builds all the objects
         // we'll be drawing.
 
-        initBuffers();
+        obj1 = createObject(0, 0, 0.5);
 
         // Next, load and set up the textures we'll be using.
 
@@ -51,7 +53,7 @@ function start() {
 
         // Set up to draw the scene periodically.
 
-        window.requestAnimationFrame(drawScene);
+        window.requestAnimationFrame(update);
     }
 }
 
@@ -85,16 +87,21 @@ function initWebGL() {
 // Initialize the buffers we'll need. For this demo, we just have
 // one object -- a simple two-dimensional cube.
 //
-function initBuffers() {
+function createObject(x, y, z) {
 
-    // Create a buffer for the cube's vertices.
-
-    cubeVerticesBuffer = gl.createBuffer();
+    var newObject = {
+        cubeVerticesBuffer: gl.createBuffer(),
+        cubeVerticesTextureCoordBuffer: gl.createBuffer(),
+        cubeVerticesIndexBuffer: gl.createBuffer(),
+        x: x,
+        y: y,
+        z: z
+    };
 
     // Select the cubeVerticesBuffer as the one to apply vertex
     // operations to from here out.
 
-    gl.bindBuffer(gl.ARRAY_BUFFER, cubeVerticesBuffer);
+    gl.bindBuffer(gl.ARRAY_BUFFER, newObject.cubeVerticesBuffer);
 
     // Now create an array of vertices for the cube.
 
@@ -144,8 +151,7 @@ function initBuffers() {
 
     // Map the texture onto the cube's faces.
 
-    cubeVerticesTextureCoordBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, cubeVerticesTextureCoordBuffer);
+    gl.bindBuffer(gl.ARRAY_BUFFER, newObject.cubeVerticesTextureCoordBuffer);
 
     var textureCoordinates = [
       // Front
@@ -186,17 +192,16 @@ function initBuffers() {
     // Build the element array buffer; this specifies the indices
     // into the vertex array for each face's vertices.
 
-    cubeVerticesIndexBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, cubeVerticesIndexBuffer);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, newObject.cubeVerticesIndexBuffer);
 
     // This array defines each face as two triangles, using the
     // indices into the vertex array to specify each triangle's
     // position.
 
     var cubeVertexIndices = [
-      0,   1,  2,  0,  2,  3,   // front
-      4,   5,  6,  4,  6,  7,   // back
-      8,   9, 10,  8, 10, 11,   // top
+      0, 1, 2, 0, 2, 3,   // front
+      4, 5, 6, 4, 6, 7,   // back
+      8, 9, 10, 8, 10, 11,   // top
       12, 13, 14, 12, 14, 15,   // bottom
       16, 17, 18, 16, 18, 19,   // right
       20, 21, 22, 20, 22, 23    // left
@@ -206,6 +211,15 @@ function initBuffers() {
 
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,
         new Uint16Array(cubeVertexIndices), gl.STATIC_DRAW);
+
+    return objects.push(newObject) - 1;
+}
+
+function setPosition(id, x, y, z) {
+    var object = objects[id];
+    object.x = x;
+    object.y = y;
+    object.z = z;
 }
 
 //
@@ -232,6 +246,25 @@ function handleTextureLoaded(image, texture) {
     gl.generateMipmap(gl.TEXTURE_2D);
 }
 
+var t = 0;
+
+var idleMSeconds = 0;
+var lastFrame = +new Date();
+function update() {
+    var now = +new Date();
+    var deltaT = now - lastFrame;
+    idleMSeconds += deltaT;
+    while (idleMSeconds >= 16) {
+        idleMSeconds -= 16;
+        t++;
+        setPosition(obj1, Math.cos(t / 100), Math.sin(t / 100)/4, Math.sin(t / 100));
+    }
+    drawScene();
+    lastFrame = now;
+    window.requestAnimationFrame(update);
+
+}
+
 //
 // drawScene
 //
@@ -240,7 +273,10 @@ function handleTextureLoaded(image, texture) {
 function drawScene() {
     // Clear the canvas before we start drawing on it.
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-    
+    objects.forEach(drawObject);
+}
+function drawObject(object) {
+
     // Identity perspective transform.
     var identity = [
         1.0, 0.0, 0.0, 0.0,
@@ -254,16 +290,16 @@ function drawScene() {
         1.0, 0.0, 0.0, 0.0,
         0.0, 1.0, 0.0, 0.0,
         0.0, 0.0, 1.0, 0.0,
-       -0.0, 0.0,-1.5, 1.0
-       ]
+       object.x, object.y, object.z, 1.0
+    ]
 
     // Draw the cube by binding the array buffer to the cube's vertices
     // array, setting attributes, and pushing it to GL.
-    gl.bindBuffer(gl.ARRAY_BUFFER, cubeVerticesBuffer);
+    gl.bindBuffer(gl.ARRAY_BUFFER, object.cubeVerticesBuffer);
     gl.vertexAttribPointer(vertexPositionAttribute, 3, gl.FLOAT, false, 0, 0);
 
     // Set the texture coordinates attribute for the vertices.
-    gl.bindBuffer(gl.ARRAY_BUFFER, cubeVerticesTextureCoordBuffer);
+    gl.bindBuffer(gl.ARRAY_BUFFER, object.cubeVerticesTextureCoordBuffer);
     gl.vertexAttribPointer(textureCoordAttribute, 2, gl.FLOAT, false, 0, 0);
 
     // Specify the texture to map onto the faces.
@@ -272,14 +308,11 @@ function drawScene() {
     gl.uniform1i(samplerUniform, 0);
 
     // Draw the cube.
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, cubeVerticesIndexBuffer);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, object.cubeVerticesIndexBuffer);
     gl.uniformMatrix4fv(pUniform, false, new Float32Array(identity));
     gl.uniformMatrix4fv(mUniform, false, new Float32Array(model));
     gl.uniformMatrix4fv(vUniform, false, window.getViewMatrix());
     gl.drawElements(gl.TRIANGLES, 36, gl.UNSIGNED_SHORT, 0);
-
-    // Present the frame.
-    window.requestAnimationFrame(drawScene);
 }
 
 //
